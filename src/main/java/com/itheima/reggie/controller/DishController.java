@@ -16,10 +16,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @RestController
@@ -36,11 +38,16 @@ public class DishController {
     @Autowired
     private CategoryService categoryService;
 
+    @Autowired
+    private RedisTemplate<Object, Object> redisTemplate;
+
 
     @PostMapping
     public R<String> save(@RequestBody DishDto dishDto) {
         log.info("上傳菜品！");
         dishService.saveWithFlavor(dishDto);
+        String key = "dish_" + dishDto.getCategoryId() + "_1";
+        redisTemplate.delete(key);
         return R.success("新增菜品成功！");
     }
 
@@ -84,6 +91,8 @@ public class DishController {
     public R<String> update(@RequestBody DishDto dishDto) {
         log.info("上傳菜品！");
         dishService.updateWithFlavor(dishDto);
+        String key = "dish_" + dishDto.getCategoryId() + "_1";
+        redisTemplate.delete(key);
         return R.success("修改菜品成功！");
     }
 
@@ -140,13 +149,19 @@ public class DishController {
 
     @GetMapping("/list")
     public R<List<DishDto>> list(Dish dish) {
-        LambdaQueryWrapper<Dish> lqw = new LambdaQueryWrapper<>();
+        List<DishDto> list = null;
         Long catId = dish.getCategoryId();
+        String key = "dish_" +  catId + "_" + 1;
+        list = (List<DishDto>)redisTemplate.opsForValue().get(key);
+        if (list != null) {
+            return R.success(list);
+        }
+        LambdaQueryWrapper<Dish> lqw = new LambdaQueryWrapper<>();
         lqw.eq(catId != null, Dish::getCategoryId, catId);
         lqw.eq(Dish::getStatus, 1);
         lqw.orderByAsc(Dish::getSort).orderByDesc(Dish::getUpdateTime);
         final List<Dish> templist = dishService.list(lqw);
-        List<DishDto> list = new ArrayList<>();
+        list = new ArrayList<>();
         for (Dish tempDish : templist) {
             DishDto dishDto = new DishDto();
             BeanUtils.copyProperties(tempDish, dishDto);
@@ -163,6 +178,7 @@ public class DishController {
             dishDto.setFlavors(dishFlavors);
             list.add(dishDto);
         }
+        redisTemplate.opsForValue().set(key,list, 60l, TimeUnit.MINUTES);
         return R.success(list);
     }
 

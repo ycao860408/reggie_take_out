@@ -8,12 +8,14 @@ import com.itheima.reggie.service.UserService;
 import com.itheima.reggie.utils.ValidateCodeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/user")
@@ -22,6 +24,9 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     @PostMapping("/sendMsg")
     public R<String> sendMsg(@RequestBody User user, HttpSession session) {
@@ -36,7 +41,8 @@ public class UserController {
         // user aliyun to send the message about the validate code to the user
         //SMSUtils.sendMessage();
         // save the validate code in the session for later validation!~
-        session.setAttribute(phone, code);
+
+        redisTemplate.opsForValue().set(phone, code,5l, TimeUnit.MINUTES);
         return R.success("手機驗證碼短信發送成功！");
     }
 
@@ -48,7 +54,7 @@ public class UserController {
         // get validating code
         String code = (String)map.get("code");
         // get the target from session
-        String targetCode = (String)session.getAttribute(phone);
+        String targetCode = (String)redisTemplate.opsForValue().get(phone);
         // line up with target if so  let it go
         if (targetCode == null || !targetCode.equals(code)) {
             return R.error("登陸失敗！");
@@ -63,7 +69,7 @@ public class UserController {
             userService.save(user);
         }
         session.setAttribute("user", user.getId());
-        System.out.println("========================" + session.getAttribute("user") + "===============================");
+        redisTemplate.delete(phone);
         return R.success(user);
     }
 
