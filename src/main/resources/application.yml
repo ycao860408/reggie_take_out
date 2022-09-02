@@ -58,4 +58,4 @@ mybatis-plus:
       #logic-delete-value: 1
 
 reggie:
-  path: D:\itheima\img\
+  path: /usr/local/img/
